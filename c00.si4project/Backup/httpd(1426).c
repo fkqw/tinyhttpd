@@ -29,7 +29,7 @@
 #include <strings.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <pthread.h>
+//#include <pthread.h>
 #include <sys/wait.h>
 #include <stdlib.h>
 
@@ -305,8 +305,7 @@ void execute_cgi(int client, const char *path,
  send(client, buf, strlen(buf), 0);
 
  //下面这里创建两个管道，用于两个进程间通信
- if (pipe(cgi_output) < 0) 
- {
+ if (pipe(cgi_output) < 0) {
   cannot_execute(client);
   return;
  }
@@ -322,21 +321,17 @@ void execute_cgi(int client, const char *path,
  }
  
  //子进程用来执行 cgi 脚本
- ///子进程是0，父进程是大于0的
  if (pid == 0)  /* child: CGI script */
  {
   char meth_env[255];
   char query_env[255];
   char length_env[255];
 
- 
-  ///1代表着stdout，0代表着stdin，将系统标准输出重定向为cgi_output[1]
+  //dup2()包含<unistd.h>中，参读《TLPI》P97
+  //将子进程的输出由标准输出重定向到 cgi_ouput 的管道写端上
   dup2(cgi_output[1], 1);
- ///将系统标准输入重定向为cgi_input[0]，这一点非常关键，
-//cgi程序中用的是标准输入输出进行交互
-
+  //将子进程的输出由标准输入重定向到 cgi_ouput 的管道读端上
   dup2(cgi_input[0], 0);
- 
   //关闭 cgi_ouput 管道的读端与cgi_input 管道的写端
   close(cgi_output[0]);
   close(cgi_input[1]);
@@ -362,9 +357,7 @@ void execute_cgi(int client, const char *path,
   execl(path, path, NULL);
   exit(0);
   
- } 
- else
- {    /* parent */
+ } else {    /* parent */
   //父进程则关闭了 cgi_output管道的写端和 cgi_input 管道的读端
   close(cgi_output[1]);
   close(cgi_input[0]);
@@ -633,10 +626,9 @@ int main(void)
   if (client_sock == -1)
    error_die("accept");
   
- // accept_request(client_sock);
- ///线程号，无所谓，accept_request线程执行函数。client_sock传递的参数
- if (pthread_create(&newthread , NULL, accept_request, client_sock) != 0)
-   perror("pthread_create");
+  accept_request(client_sock);
+ /*if (pthread_create(&newthread , NULL, accept_request, client_sock) != 0)
+   perror("pthread_create");*/
  }
 
  close(server_sock);

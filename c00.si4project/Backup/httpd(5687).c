@@ -29,7 +29,7 @@
 #include <strings.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <pthread.h>
+//#include <pthread.h>
 #include <sys/wait.h>
 #include <stdlib.h>
 
@@ -71,22 +71,16 @@ void accept_request(int client)
  char *query_string = NULL;
 
  //读http 请求的第一行数据（request line），把请求方法存进 method 中
- /////"GET / HTTP/1.1\n"
  numchars = get_line(client, buf, sizeof(buf));
-
- ///得到请求方法。
  i = 0; j = 0;
  while (!ISspace(buf[j]) && (i < sizeof(method) - 1))
  {
- ///请求方法放在method中
   method[i] = buf[j];
   i++; j++;
  }
  method[i] = '\0';
 
-
  //如果请求的方法不是 GET 或 POST 任意一个的话就直接发送 response 告诉客户端没实现该方法
- ///如果不是get和post 就回复客户端没有该方法
  if (strcasecmp(method, "GET") && strcasecmp(method, "POST"))
  {
   unimplemented(client);
@@ -126,7 +120,6 @@ void accept_request(int client)
    //如果是 ？ 的话，证明这个请求需要调用 cgi，将 cgi 标志变量置一(true)
    cgi = 1;
    //从字符 ？ 处把字符串 url 给分隔会两份
-   ///当前字符设置为\0从下一个开始，这样也改变了原来的数据，会被看成两份数据。
    *query_string = '\0';
    //使指针指向字符 ？后面的那个字符
    query_string++;
@@ -137,15 +130,10 @@ void accept_request(int client)
  sprintf(path, "htdocs%s", url);
  
  //如果 path 数组中的这个字符串的最后一个字符是以字符 / 结尾的话，就拼接上一个"index.html"的字符串。首页的意思
- ///把path改成首页。
  if (path[strlen(path) - 1] == '/')
   strcat(path, "index.html");
-
-
  
  //在系统上去查询该文件是否存在
- ///如果在该目录下存在该文件名，则把相关属性放在st上。
- ///文件不存在时，丢弃，重新读取。
  if (stat(path, &st) == -1) {
   //如果不存在，那把这次 http 的请求后续的内容(head 和 body)全部读完并忽略
   while ((numchars > 0) && strcmp("\n", buf))  /* read & discard headers */
@@ -157,15 +145,11 @@ void accept_request(int client)
  {
   //文件存在，那去跟常量S_IFMT相与，相与之后的值可以用来判断该文件是什么类型的
   //S_IFMT参读《TLPI》P281，与下面的三个常量一样是包含在<sys/stat.h>
-
-  ///获取，url地址下的文件类型，st.st_mode & S_IFMT，与掩码相与，看是否是目录。
-  
   if ((st.st_mode & S_IFMT) == S_IFDIR)  
    //如果这个文件是个目录，那就需要再在 path 后面拼接一个"/index.html"的字符串
    strcat(path, "/index.html");
    
    //S_IXUSR, S_IXGRP, S_IXOTH三者可以参读《TLPI》P295
-   ///看是否是一个可执行文件。
   if ((st.st_mode & S_IXUSR) ||       
       (st.st_mode & S_IXGRP) ||
       (st.st_mode & S_IXOTH)    )
@@ -174,7 +158,6 @@ void accept_request(int client)
    
   if (!cgi)
    //如果不需要 cgi 机制的话，
-   ///如果不是cgi
    serve_file(client, path);
   else
    //如果需要则调用
@@ -216,7 +199,6 @@ void cat(int client, FILE *resource)
  char buf[1024];
 
  //从文件文件描述符中读取指定内容
- ///不断读取发送，知道最后。
  fgets(buf, sizeof(buf), resource);
  while (!feof(resource))
  {
@@ -305,8 +287,7 @@ void execute_cgi(int client, const char *path,
  send(client, buf, strlen(buf), 0);
 
  //下面这里创建两个管道，用于两个进程间通信
- if (pipe(cgi_output) < 0) 
- {
+ if (pipe(cgi_output) < 0) {
   cannot_execute(client);
   return;
  }
@@ -322,21 +303,17 @@ void execute_cgi(int client, const char *path,
  }
  
  //子进程用来执行 cgi 脚本
- ///子进程是0，父进程是大于0的
  if (pid == 0)  /* child: CGI script */
  {
   char meth_env[255];
   char query_env[255];
   char length_env[255];
 
- 
-  ///1代表着stdout，0代表着stdin，将系统标准输出重定向为cgi_output[1]
+  //dup2()包含<unistd.h>中，参读《TLPI》P97
+  //将子进程的输出由标准输出重定向到 cgi_ouput 的管道写端上
   dup2(cgi_output[1], 1);
- ///将系统标准输入重定向为cgi_input[0]，这一点非常关键，
-//cgi程序中用的是标准输入输出进行交互
-
+  //将子进程的输出由标准输入重定向到 cgi_ouput 的管道读端上
   dup2(cgi_input[0], 0);
- 
   //关闭 cgi_ouput 管道的读端与cgi_input 管道的写端
   close(cgi_output[0]);
   close(cgi_input[1]);
@@ -362,9 +339,7 @@ void execute_cgi(int client, const char *path,
   execl(path, path, NULL);
   exit(0);
   
- } 
- else
- {    /* parent */
+ } else {    /* parent */
   //父进程则关闭了 cgi_output管道的写端和 cgi_input 管道的读端
   close(cgi_output[1]);
   close(cgi_input[0]);
@@ -406,28 +381,25 @@ int get_line(int sock, char *buf, int size)
  int i = 0;
  char c = '\0';
  int n;
-///只有读到最后才结束。如果读到\r\n,不会结束，会存储\n.
+
  while ((i < size - 1) && (c != '\n'))
  {
+  //recv()包含于<sys/socket.h>,参读《TLPI》P1259, 
   //读一个字节的数据存放在 c 中
-  ///读取客户端发送过来的第一个数据，不断的读取，直到数组越界，或者读到\n
   n = recv(sock, &c, 1, 0);
-  
-///接受到数据的长度
+  /* DEBUG printf("%02X\n", c); */
   if (n > 0)
   {
    if (c == '\r')
    {
-    ///接受后，不删除原来的数据。MSG_PEEK,
-    ///先判断是否是\r\n，如果只是\r,则转为\n存储起来，如果是\r\n则只保存\n，如果是
+    //
     n = recv(sock, &c, 1, MSG_PEEK);
-  
+    /* DEBUG printf("%02X\n", c); */
     if ((n > 0) && (c == '\n'))
      recv(sock, &c, 1, 0);
     else
      c = '\n';
    }
-   ///如果不是'\r'则放进接收数组
    buf[i] = c;
    i++;
   }
@@ -444,7 +416,6 @@ int get_line(int sock, char *buf, int size)
 /* Parameters: the socket to print the headers on
  *             the name of the file */
 /**********************************************************************/
-///http头部格式
 void headers(int client, const char *filename)
 {
  char buf[1024];
@@ -452,13 +423,10 @@ void headers(int client, const char *filename)
 
  strcpy(buf, "HTTP/1.0 200 OK\r\n");
  send(client, buf, strlen(buf), 0);
- 
  strcpy(buf, SERVER_STRING);
  send(client, buf, strlen(buf), 0);
- 
  sprintf(buf, "Content-Type: text/html\r\n");
  send(client, buf, strlen(buf), 0);
- 
  strcpy(buf, "\r\n");
  send(client, buf, strlen(buf), 0);
 }
@@ -622,21 +590,17 @@ int main(void)
  server_sock = startup(&port);
  printf("httpd running on port %d\n", port);
 
-
  while (1)
  {
   //阻塞等待客户端的连接，参读《TLPI》P1157
-  ///创建成功后，便开始进行接受。这里返回的是发送数据过来的客户端的socket
   client_sock = accept(server_sock,
                        (struct sockaddr *)&client_name,
                        &client_name_len);
   if (client_sock == -1)
    error_die("accept");
-  
- // accept_request(client_sock);
- ///线程号，无所谓，accept_request线程执行函数。client_sock传递的参数
- if (pthread_create(&newthread , NULL, accept_request, client_sock) != 0)
-   perror("pthread_create");
+  accept_request(client_sock);
+ /*if (pthread_create(&newthread , NULL, accept_request, client_sock) != 0)
+   perror("pthread_create");*/
  }
 
  close(server_sock);
